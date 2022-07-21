@@ -46,7 +46,30 @@ WordCount *word_counts = NULL;
  */
 int num_words(FILE* infile) {
   int num_words = 0;
-
+  unsigned char c;
+  int word_len = 0;
+  while(c=(unsigned char)fgetc(infile)){
+    if(c == EOF){
+      if(word_len > 1){
+        num_words++;
+      }
+      break;
+    }
+    else {
+      if (isalpha(c) > 0){
+        word_len++;
+      }
+      else {
+        c = ' ';
+      }
+      if (c == ' '){
+        if(word_len > 1){
+          num_words++;
+        }
+        word_len = 0;
+      }
+    }
+  }
   return num_words;
 }
 
