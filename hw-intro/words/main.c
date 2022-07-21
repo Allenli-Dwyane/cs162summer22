@@ -59,6 +59,11 @@ int num_words(FILE* infile) {
     else {
       if (isalpha(c) > 0){
         word_len++;
+        if(word_len > MAX_WORD_LEN){
+          // any word length that exceeds the MAX_WORD_LEN is deemed as two different words.
+          num_words++;
+          word_len = 1;
+        }
       }
       else {
         /* just in case that some unregular characters are present, 
@@ -84,6 +89,8 @@ int num_words(FILE* infile) {
  * Useful functions: fgetc(), isalpha(), tolower(), add_word().
  */
 void count_words(WordCount **wclist, FILE *infile) {
+  WordCount *wchead = *wclist;
+
 }
 
 /*
@@ -92,7 +99,6 @@ void count_words(WordCount **wclist, FILE *infile) {
  */
 static bool wordcount_less(const WordCount *wc1, const WordCount *wc2) {
   if (wc1 -> count < wc2 -> count) return 1;
-
   return 0;
 }
 
