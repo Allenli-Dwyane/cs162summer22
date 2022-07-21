@@ -48,8 +48,9 @@ int num_words(FILE* infile) {
   int num_words = 0;
   unsigned char c;
   int word_len = 0;
-  while(c=(unsigned char)fgetc(infile)){
-    if(c == EOF){
+  while(c = fgetc(infile)){
+    if((char)c == EOF){
+      // this cast from unsigned char to char is important, otherwise EOF = -1 will never be encountered.
       if(word_len > 1){
         num_words++;
       }
@@ -60,6 +61,9 @@ int num_words(FILE* infile) {
         word_len++;
       }
       else {
+        /* just in case that some unregular characters are present, 
+        e.g., something like ABCD///::djkffsa/// should only be counted as two words.
+        */
         c = ' ';
       }
       if (c == ' '){
@@ -87,6 +91,8 @@ void count_words(WordCount **wclist, FILE *infile) {
  * Useful function: strcmp().
  */
 static bool wordcount_less(const WordCount *wc1, const WordCount *wc2) {
+  if (wc1 -> count < wc2 -> count) return 1;
+
   return 0;
 }
 
@@ -151,6 +157,11 @@ int main (int argc, char *argv[]) {
     // No input file specified, instead, read from STDIN instead.
     infile = stdin;
   } else {
+    for (int k = optind; k < argc; k++){
+      FILE *fd = fopen(argv[k], "r");
+      total_words += num_words(fd);
+      fclose(fd);
+    }
     // At least one file specified. Useful functions: fopen(), fclose().
     // The first file can be found at argv[optind]. The last file can be
     // found at argv[argc-1].
