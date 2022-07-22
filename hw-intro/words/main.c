@@ -89,7 +89,35 @@ int num_words(FILE* infile) {
  * Useful functions: fgetc(), isalpha(), tolower(), add_word().
  */
 void count_words(WordCount **wclist, FILE *infile) {
-  WordCount *wchead = *wclist;
+  unsigned char c;
+  // char cur_word[MAX_WORD_LEN] = {0};
+  char *cur_word = (char *)malloc((size_t)MAX_WORD_LEN);
+  char *word = cur_word;
+  while (c = fgetc(infile)){
+    if((char)c == EOF){
+      break;
+    }
+    if(isalpha(c) > 0){
+      c = (unsigned char)tolower(c);
+      *word = c;
+      if(strlen(cur_word) == MAX_WORD_LEN){
+        word++;
+        *word = '\0';
+        add_word(wclist, cur_word);
+        cur_word = (char *)malloc((size_t)MAX_WORD_LEN);
+        word = cur_word;
+        continue; 
+      }
+      word++;
+    }
+    else{
+      *word = '\0';
+      if(strlen(cur_word) > 1)
+        add_word(wclist, cur_word);
+      cur_word = (char *)malloc((size_t)MAX_WORD_LEN);
+      word = cur_word;
+    }
+  }
 
 }
 
@@ -99,6 +127,10 @@ void count_words(WordCount **wclist, FILE *infile) {
  */
 static bool wordcount_less(const WordCount *wc1, const WordCount *wc2) {
   if (wc1 -> count < wc2 -> count) return 1;
+  else if (wc1 -> count == wc2 -> count){
+    if(strcmp(wc1 -> word, wc2 -> word) < 0) return 1;
+    else return 0;
+  }
   return 0;
 }
 
@@ -162,11 +194,18 @@ int main (int argc, char *argv[]) {
   if ((argc - optind) < 1) {
     // No input file specified, instead, read from STDIN instead.
     infile = stdin;
+    total_words = num_words(infile);
+    count_words(&word_counts,infile);
   } else {
     for (int k = optind; k < argc; k++){
-      FILE *fd = fopen(argv[k], "r");
-      total_words += num_words(fd);
-      fclose(fd);
+      infile = fopen(argv[k], "r");
+      total_words += num_words(infile);
+      fclose(infile);
+    }
+    for (int k = optind; k < argc; k++){
+      infile = fopen(argv[k], "r");
+      count_words(&word_counts, infile);
+      fclose(infile);
     }
     // At least one file specified. Useful functions: fopen(), fclose().
     // The first file can be found at argv[optind]. The last file can be
