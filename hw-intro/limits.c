@@ -10,9 +10,11 @@ int main() {
     if(prlimit(CUR_PROC, RLIMIT_STACK, NULL, &lim) == -1)
         perror("prlimit-1");
     printf("stack size: %ld\n", lim.rlim_cur);
+    /* get proc size */
     if(prlimit(CUR_PROC, RLIMIT_NPROC, NULL, &lim) == -1)
         perror("prlimit-1");
     printf("process limit: %ld\n", lim.rlim_cur);
+    /* get fd number */
     if(prlimit(CUR_PROC, RLIMIT_NOFILE, NULL, &lim) == -1)
         perror("prlimit-1");
     printf("max file descriptors: %ld\n", lim.rlim_cur);
