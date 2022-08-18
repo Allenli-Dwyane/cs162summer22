@@ -1,3 +1,5 @@
+Solution to hw-intro.
+
 # Counting Words
 
 The solution can be found in [main.c](./words/main.c) and [word_count.c](./words/word_count.c)
