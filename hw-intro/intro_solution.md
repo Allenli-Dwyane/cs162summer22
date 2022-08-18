@@ -101,5 +101,116 @@ The solution can be found in [limits.c](./limits.c).
 4. 
     ```bash
     (gdb) p &argv
-    $1 = (char ***) 0x7fffffffddb0
+    $1 = (char ***) 0x7fffffffddc0
     ```
+
+5.
+    ```bash
+    (gdb) p argv
+    $2 = (char **) 0x7fffffffded8
+    ```
+
+6.
+    ```bash
+    (gdb) b recur
+    Breakpoint 2 at 0x5555555546d8: file recurse.c, line 5.
+    (gdb) c
+    Continuing.
+    Breakpoint 2, recur (i=3) at recurse.c:5
+    ```
+
+7.
+    ```bash
+    (gdb) p &recur
+    $1 = (int (*)(int)) 0x5555555546cd <recur>
+    ```
+
+8.  skip
+
+9.
+    use
+
+    ```bash
+    (gdb) n or next
+    ```
+
+10.
+    ```bash
+    (gdb) layout asm
+    ```
+
+11.
+    ```bash
+    (gdb) si
+    ```
+
+12.
+    ```bash
+    (gdb) info reg
+    ```
+    or
+    ```bash
+    (gdb) layout regs
+    ```
+
+13.
+    ```bash
+    (gdb) si
+    ```
+
+14.
+    ```bash
+    (gdb) layout src
+    ```
+
+15.
+    ```bash
+    (gdb) backtrace 
+    #0  0x0000555555554702 in recur (i=3) at recurse.c:9
+    #1  0x00005555555546c6 in main (argc=1, argv=0x7fffffffe2a8) at map.c:23
+    ```
+
+16.
+    ```bash
+    (gdb) info b
+    Num     Type           Disp Enb Address            What
+    1       breakpoint     keep y   0x00005555555546d8 in recur at recurse.c:5
+            breakpoint already hit 1 time
+    (gdb) condition 1 i==0
+    ```
+
+17.
+    ```bash
+    (gdb) c
+    ```
+
+18.
+    ```
+    (gdb) backtrace 
+    #0  recur (i=0) at recurse.c:5
+    #1  0x0000555555554707 in recur (i=1) at recurse.c:9
+    #2  0x0000555555554707 in recur (i=2) at recurse.c:9
+    #3  0x0000555555554707 in recur (i=3) at recurse.c:9
+    #4  0x00005555555546c6 in main (argc=1, argv=0x7fffffffe2a8) at map.c:23
+    ```
+
+19.
+    ```bash
+    (gdb) up 4
+    #4  0x00005555555546c6 in main (argc=1, argv=0x7fffffffe298) at map.c:23
+    (gdb) p argc
+    $1 = 1
+    ```
+
+20. skip
+
+21. skip
+
+22. 
+    ```bash
+    0x555555554709 <recur+60>   mov    $0x0,%eax 
+    0x55555555470e <recur+65>   leaveq 
+    0x55555555470f <recur+66>   retq
+    ```
+
+23-26. skip
