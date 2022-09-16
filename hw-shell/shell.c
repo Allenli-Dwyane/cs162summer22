@@ -38,6 +38,13 @@ int cmd_cd(struct tokens* tokens);
 /* HW2 not built-in commands */
 int cmd_bash(struct tokens* tokens);
 
+/* HW2 path resolution */
+static char** path_resolution();
+#ifndef MAX_PATH_NUM
+#define MAX_PATH_NUM 200
+#endif
+static char*all_paths[MAX_PATH_NUM];
+
 /* Built-in command functions take token array (see parse.h) and return int */
 typedef int cmd_fun_t(struct tokens* tokens);
 
@@ -103,12 +110,64 @@ int cmd_bash(struct tokens* tokens){
       argv[k] = tokens_get_token(tokens, k);
     }
     argv[arg_num] = NULL;
-    execv(cmd, argv);
+
+    int err = execv(cmd, argv);
+
+    /* need path resolution */
+    if(err == -1){
+      char **s = path_resolution();
+      while(*s!=NULL){
+        char *cur_full_path = malloc(strlen(*s)+1);
+        strncpy(cur_full_path, *s, strlen(*s)+1);
+        cur_full_path = strncat(cur_full_path, "/", 1);
+        cur_full_path = strncat(cur_full_path, cmd, strlen(cmd));
+        if(!cur_full_path){
+          fprintf(stderr, "Strcat failed\n");
+        }
+        s++;
+        if(execv(cur_full_path, argv)==-1);
+        else{
+          exit(0);
+        }
+      }
+      exit(1);
+    }
+    exit(0);
   }
   else{
     int rc = wait(NULL);
   }
   return 1;
+}
+/* path resolution */
+static char** path_resolution()
+{
+  char *envvar = "PATH";
+  char *s_path = getenv(envvar);
+  if(s_path == NULL){
+    fprintf(stderr, "Not found the %s environment variable\n", envvar);
+    exit(1);
+  }
+
+  int path_len = strlen(s_path);
+  char *s_path_copy = (char*)malloc(path_len+1);
+  strncpy(s_path_copy, s_path, path_len+1);
+
+  int index = 0;
+  char *s = s_path_copy;
+  while(1){
+    if(!*s){
+      all_paths[index++] = s_path_copy;
+      all_paths[index]=NULL;
+      return all_paths;
+    }
+    if(*s == ':'){ 
+      all_paths[index++]=s_path_copy;
+      *s = '\0';
+      s_path_copy = (s+1);
+    }
+    s++;
+  }
 }
 /* Prints a helpful description for the given command */
 int cmd_help(unused struct tokens* tokens) {
