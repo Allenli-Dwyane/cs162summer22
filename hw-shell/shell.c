@@ -31,6 +31,10 @@ pid_t shell_pgid;
 int cmd_exit(struct tokens* tokens);
 int cmd_help(struct tokens* tokens);
 
+/* HW2 directory commands */
+int cmd_pwd(struct tokens* tokens);
+int cmd_cd(struct tokens* tokens);
+
 /* Built-in command functions take token array (see parse.h) and return int */
 typedef int cmd_fun_t(struct tokens* tokens);
 
@@ -44,8 +48,38 @@ typedef struct fun_desc {
 fun_desc_t cmd_table[] = {
     {cmd_help, "?", "show this help menu"},
     {cmd_exit, "exit", "exit the command shell"},
+    {cmd_pwd, "pwd", "get current working directory"},
+    {cmd_cd, "cd", "change current working directory"},
 };
 
+/* Prints the current working directory to standard output */
+int cmd_pwd(unused struct tokens* tokens){
+  const int MAX_CWD = 100;
+  char buf[MAX_CWD];
+  char *s = getcwd(buf, MAX_CWD);
+  if(s==NULL){
+    printf("get current working directory failed.\n");
+    return 0;
+  }
+  printf("%s\n", s);
+  return 1;
+
+}
+
+/* changes the current working directory */
+int cmd_cd(struct tokens* tokens){
+  char *s = tokens_get_token(tokens, 1);
+  if(s == NULL){
+    printf("missing arguments: cd PATH_NAME\n");
+    return 0;
+  }
+  int err = chdir(s);
+  if(err == -1){
+    printf("change working directory failed\n");
+    return 0;
+  }
+  return 1;
+}
 /* Prints a helpful description for the given command */
 int cmd_help(unused struct tokens* tokens) {
   for (unsigned int i = 0; i < sizeof(cmd_table) / sizeof(fun_desc_t); i++)
