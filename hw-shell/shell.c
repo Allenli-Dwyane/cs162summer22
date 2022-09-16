@@ -35,6 +35,9 @@ int cmd_help(struct tokens* tokens);
 int cmd_pwd(struct tokens* tokens);
 int cmd_cd(struct tokens* tokens);
 
+/* HW2 not built-in commands */
+int cmd_bash(struct tokens* tokens);
+
 /* Built-in command functions take token array (see parse.h) and return int */
 typedef int cmd_fun_t(struct tokens* tokens);
 
@@ -77,6 +80,33 @@ int cmd_cd(struct tokens* tokens){
   if(err == -1){
     printf("change working directory failed\n");
     return 0;
+  }
+  return 1;
+}
+
+/* not built-in commands execution */
+int cmd_bash(struct tokens* tokens){
+  pid_t pid = fork();
+  if(pid<0){
+    fprintf(stderr, "Fork failed\n");
+    return 0;
+  }
+  else if(pid == 0){
+    char *cmd = tokens_get_token(tokens, 0);
+    if(cmd == NULL){
+      fprintf(stderr, "missing command arguements\n");
+      return 0;
+    }
+    size_t arg_num = tokens_get_length(tokens);
+    char *argv[arg_num+1];
+    for(int k=0;k<arg_num;k++){
+      argv[k] = tokens_get_token(tokens, k);
+    }
+    argv[arg_num] = NULL;
+    execv(cmd, argv);
+  }
+  else{
+    int rc = wait(NULL);
   }
   return 1;
 }
@@ -145,7 +175,13 @@ int main(unused int argc, unused char* argv[]) {
       cmd_table[fundex].fun(tokens);
     } else {
       /* REPLACE this to run commands as programs. */
-      fprintf(stdout, "This shell doesn't know how to run programs.\n");
+      // fprintf(stdout, "This shell doesn't know how to run programs.\n");
+      fun_desc_t func = {
+        .fun = cmd_bash,
+        .cmd = tokens_get_token(tokens, 0),
+        .doc = "bash commands",
+      };
+      func.fun(tokens);
     }
 
     if (shell_is_interactive)
