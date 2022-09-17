@@ -39,11 +39,17 @@ int cmd_cd(struct tokens* tokens);
 int cmd_bash(struct tokens* tokens);
 
 /* HW2 path resolution */
-static char** path_resolution();
-#ifndef MAX_PATH_NUM
-#define MAX_PATH_NUM 200
+char* path_resolution(const char*);
+#ifndef MAX_PATH_LEN
+#define MAX_PATH_LEN 200
 #endif
-static char*all_paths[MAX_PATH_NUM];
+
+/* HW2 redirection */
+int find_redirect(struct tokens* tokens, const char* redirection);
+int cmd_redirect(struct tokens* tokens);
+
+/* HW2 pipes */
+int* find_pipes(struct tokens* tokens);
 
 /* Built-in command functions take token array (see parse.h) and return int */
 typedef int cmd_fun_t(struct tokens* tokens);
@@ -63,7 +69,8 @@ fun_desc_t cmd_table[] = {
 };
 
 /* Prints the current working directory to standard output */
-int cmd_pwd(unused struct tokens* tokens){
+int cmd_pwd(unused struct tokens* tokens)
+{
   const int MAX_CWD = 100;
   char buf[MAX_CWD];
   char *s = getcwd(buf, MAX_CWD);
@@ -77,7 +84,8 @@ int cmd_pwd(unused struct tokens* tokens){
 }
 
 /* changes the current working directory */
-int cmd_cd(struct tokens* tokens){
+int cmd_cd(struct tokens* tokens)
+{
   char *s = tokens_get_token(tokens, 1);
   if(s == NULL){
     printf("missing arguments: cd PATH_NAME\n");
@@ -91,48 +99,142 @@ int cmd_cd(struct tokens* tokens){
   return 1;
 }
 
+/* find redirection symbols */
+/* return -1 on error */
+/* return a non-negative number on success */
+/* which represents the redirection symbol location */
+int find_redirect(struct tokens* tokens, const char* redirection)
+{
+  int redirect_loc = -1;
+  int tokens_len = tokens_get_length(tokens);
+  if(strlen(redirection) > 1){
+    fprintf(stderr, "Only supports '<' or '>' \n");
+    return -1;
+  }
+  for(int k = 0 ; k < tokens_len; k++){
+    if(strncmp(tokens_get_token(tokens,k), redirection, 1) == 0){
+      if(redirect_loc < 0){
+        redirect_loc = k;
+      }
+      else{
+        fprintf(stderr, "More than one redirection symbol\n");
+        return -1;
+      }
+    }
+  }
+  return redirect_loc;
+}
+
+/* parse tokens when redirect is present */
+char **redirect_parse(struct tokens* tokens)
+{
+  size_t tokens_len = tokens_get_length(tokens);
+  int index = 0;  
+  char **argv = (char**)malloc(sizeof(char*)*(tokens_len + 1));
+  
+  for(int k=0;k<tokens_len;k++){
+    char* cur_token = tokens_get_token(tokens, k);
+    if(strncmp(cur_token, ">", 1) == 0|| strncmp(cur_token, "<", 1) ==0){
+      k++;
+    }
+    else{
+      argv[index++] = tokens_get_token(tokens, k);
+    }
+  }
+  argv[index] = NULL;
+  return argv;
+}
+
+/* bash execution with redirection symbols */
+int redirect(struct tokens* tokens)
+{
+  int output_loc = find_redirect(tokens, ">");
+  int input_loc = find_redirect(tokens, "<");
+  char* out_file;
+  char* in_file;
+  int fd_out, fd_in;
+
+  if(output_loc > 0){
+    out_file = tokens_get_token(tokens, output_loc+1);
+    if(!out_file){
+      fprintf(stderr, "Syntax error for >\n");
+      return -1;
+    }
+    fd_out = open(out_file, O_RDWR | O_CREAT | O_TRUNC, 0666);
+    if(fd_out < 0){
+      fprintf(stderr, "Output stream error\n");
+      return -1;
+    }
+    dup2(fd_out, STDOUT_FILENO);
+  }
+
+  if(input_loc > 0){
+    in_file = tokens_get_token(tokens, input_loc+1);
+    if(!in_file){
+      fprintf(stderr, "Syntax error for <\n");
+      return -1;
+    }
+    fd_in = open(in_file,O_RDONLY);
+    if(fd_in < 0){
+      fprintf(stderr, "Output stream error\n");
+      return -1;
+    }
+    dup2(fd_in, STDIN_FILENO);
+  }
+
+  char** argv = redirect_parse(tokens);
+  char* full_cmd_path = path_resolution(argv[0]);
+  if(execv(full_cmd_path, argv) == -1){
+    fprintf(stderr, "%s execution failed in redirection\n", full_cmd_path);
+    exit(1);
+  }
+
+  return 0;
+}
+
+/* regular_parse, no redirection or pipes */
+char **regular_parse(struct tokens* tokens)
+{
+  size_t tokens_len = tokens_get_length(tokens);
+  char **argv = (char**)malloc(sizeof(char*)*(tokens_len + 1));
+  for(int k=0;k<tokens_len;k++){
+    argv[k] = tokens_get_token(tokens, k);
+  }
+  argv[tokens_len] = NULL;
+  return argv;
+}
 /* not built-in commands execution */
-int cmd_bash(struct tokens* tokens){
+int cmd_bash(struct tokens* tokens)
+{
+  char **argv = regular_parse(tokens);
+  char* cmd = argv[0];
+
+  /* fork and execv */
   pid_t pid = fork();
   if(pid<0){
     fprintf(stderr, "Fork failed\n");
     return 0;
   }
   else if(pid == 0){
-    char *cmd = tokens_get_token(tokens, 0);
-    if(cmd == NULL){
-      fprintf(stderr, "missing command arguements\n");
-      return 0;
-    }
-    size_t arg_num = tokens_get_length(tokens);
-    char *argv[arg_num+1];
-    for(int k=0;k<arg_num;k++){
-      argv[k] = tokens_get_token(tokens, k);
-    }
-    argv[arg_num] = NULL;
-
-    int err = execv(cmd, argv);
-
-    /* need path resolution */
-    if(err == -1){
-      char **s = path_resolution();
-      while(*s!=NULL){
-        char *cur_full_path = malloc(strlen(*s)+1);
-        strncpy(cur_full_path, *s, strlen(*s)+1);
-        cur_full_path = strncat(cur_full_path, "/", 1);
-        cur_full_path = strncat(cur_full_path, cmd, strlen(cmd));
-        if(!cur_full_path){
-          fprintf(stderr, "Strcat failed\n");
-        }
-        s++;
-        if(execv(cur_full_path, argv)==-1);
-        else{
-          exit(0);
-        }
-      }
+    char* full_cmd_path = path_resolution(cmd);
+    if(full_cmd_path == NULL){
+      fprintf(stderr, "path resolution failed\n");
       exit(1);
     }
-    exit(0);
+    if(find_redirect(tokens, ">")>=0 || find_redirect(tokens, "<")>=0){
+      if(redirect(tokens)==-1){
+        fprintf(stderr, "redirection failed\n");
+        exit(1);
+      }
+      exit(0);
+    }
+    else{
+      if(execv(full_cmd_path, argv) == -1){
+      fprintf(stderr, "%s execution failed\n", cmd);
+      exit(1);
+      }
+      exit(0);
+    }
   }
   else{
     int rc = wait(NULL);
@@ -140,34 +242,35 @@ int cmd_bash(struct tokens* tokens){
   return 1;
 }
 /* path resolution */
-static char** path_resolution()
+char* path_resolution(const char* path)
 {
+  if(*path == '/'){
+    return path;
+  }
   char *envvar = "PATH";
   char *s_path = getenv(envvar);
   if(s_path == NULL){
     fprintf(stderr, "Not found the %s environment variable\n", envvar);
     exit(1);
   }
-
-  int path_len = strlen(s_path);
+  char* full_path = (char*)malloc(MAX_PATH_LEN);
+  size_t path_len = strlen(s_path);
   char *s_path_copy = (char*)malloc(path_len+1);
   strncpy(s_path_copy, s_path, path_len+1);
 
-  int index = 0;
-  char *s = s_path_copy;
-  while(1){
-    if(!*s){
-      all_paths[index++] = s_path_copy;
-      all_paths[index]=NULL;
-      return all_paths;
+  char* cur_path = strtok(s_path_copy,":");
+  while(cur_path!=NULL){
+    strncpy(full_path, cur_path, strlen(cur_path)+1);
+    strncat(full_path, "/", 1);
+    strncat(full_path, path, strlen(path));
+    if(access(full_path, F_OK) == 0){
+      return full_path;
     }
-    if(*s == ':'){ 
-      all_paths[index++]=s_path_copy;
-      *s = '\0';
-      s_path_copy = (s+1);
+    else{
+      cur_path = strtok(NULL, ":");
     }
-    s++;
   }
+  return NULL;
 }
 /* Prints a helpful description for the given command */
 int cmd_help(unused struct tokens* tokens) {
