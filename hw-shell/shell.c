@@ -192,7 +192,38 @@ int redirect(struct tokens* tokens)
   return 0;
 }
 
-/* regular_parse, no redirection or pipes */
+/* divide pipes */ 
+char** pipes_divide(struct tokens* tokens)
+{
+  size_t tokens_len = tokens_get_length(tokens);
+  char **argv = (char**)malloc(sizeof(char*)*(tokens_len + 1));
+  for(int k = 0;k<tokens_len;k++){
+    if(strncmp(tokens_get_token(tokens, k), "|", 1) == 0){
+      argv[k] = NULL;
+    }
+    else{
+      argv[k] = tokens_get_token(tokens,k);
+    }
+  }
+  argv[tokens_len] = NULL;
+  return argv;
+}
+
+/* locate pipes */
+int *find_pipes(struct tokens* tokens)
+{
+  size_t tokens_len = tokens_get_length(tokens);
+  int* pipe_locs = (int*)malloc(sizeof(int)*(tokens_len + 1));
+  int index = 0;
+  for(int k = 0;k<tokens_len;k++){
+    if(strncmp(tokens_get_token(tokens, k), "|", 1) == 0){
+     pipe_locs[index++] = k; 
+    }
+  }
+  return pipe_locs;
+}
+
+/* regular_parse, no redirection or) pipes */
 char **regular_parse(struct tokens* tokens)
 {
   size_t tokens_len = tokens_get_length(tokens);
@@ -203,17 +234,18 @@ char **regular_parse(struct tokens* tokens)
   argv[tokens_len] = NULL;
   return argv;
 }
+
 /* not built-in commands execution */
 int cmd_bash(struct tokens* tokens)
 {
   char **argv = regular_parse(tokens);
   char* cmd = argv[0];
-
+  
   /* fork and execv */
   pid_t pid = fork();
   if(pid<0){
     fprintf(stderr, "Fork failed\n");
-    return 0;
+    return -1;
   }
   else if(pid == 0){
     char* full_cmd_path = path_resolution(cmd);
@@ -237,10 +269,11 @@ int cmd_bash(struct tokens* tokens)
     }
   }
   else{
-    int rc = wait(NULL);
+    wait(NULL);
   }
   return 1;
 }
+
 /* path resolution */
 char* path_resolution(const char* path)
 {
