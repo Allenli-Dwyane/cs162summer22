@@ -45,8 +45,8 @@ char* path_resolution(const char*);
 #endif
 
 /* HW2 redirection */
-int find_redirect(struct tokens* tokens, const char* redirection);
-int cmd_redirect(struct tokens* tokens);
+int find_symbol_loc(char**, char*);
+int redirect_execution(char**);
 
 /* HW2 pipes */
 int* find_pipes(struct tokens* tokens);
@@ -99,63 +99,71 @@ int cmd_cd(struct tokens* tokens)
   return 1;
 }
 
-/* find redirection symbols */
-/* return -1 on error */
-/* return a non-negative number on success */
-/* which represents the redirection symbol location */
-int find_redirect(struct tokens* tokens, const char* redirection)
+/* find symbol location*/
+int find_symbol_loc(char** args, char* symbol)
 {
-  int redirect_loc = -1;
-  int tokens_len = tokens_get_length(tokens);
-  if(strlen(redirection) > 1){
+  int loc = -1;
+  int index = 0;
+  char** s = args;
+  if(strlen(symbol) > 1){
     fprintf(stderr, "Only supports '<' or '>' \n");
     return -1;
   }
-  for(int k = 0 ; k < tokens_len; k++){
-    if(strncmp(tokens_get_token(tokens,k), redirection, 1) == 0){
-      if(redirect_loc < 0){
-        redirect_loc = k;
+  
+  while(*s != NULL){
+    if(strncmp(*s, symbol, 1) == 0){
+      if(loc < 0){
+        /* find symbol for the first time */
+        loc = index;
       }
       else{
-        fprintf(stderr, "More than one redirection symbol\n");
+        fprintf(stderr, "More than one symbol\n");
         return -1;
       }
     }
+    s++;
+    index++;
   }
-  return redirect_loc;
-}
+  return loc;
 
+}
 /* parse tokens when redirect is present */
-char **redirect_parse(struct tokens* tokens)
+char** redirect_parse(char** args)
 {
-  size_t tokens_len = tokens_get_length(tokens);
-  int index = 0;  
-  char **argv = (char**)malloc(sizeof(char*)*(tokens_len + 1));
-  
-  for(int k=0;k<tokens_len;k++){
-    char* cur_token = tokens_get_token(tokens, k);
-    if(strncmp(cur_token, ">", 1) == 0|| strncmp(cur_token, "<", 1) ==0){
-      k++;
+  char** s = args;
+  char** argv = (char**)malloc(sizeof(char*)*MAX_PATH_LEN);
+  int index = 0;
+  while(*s!=NULL){
+    if(strncmp(*s, ">", 1) == 0 || strncmp(*s, "<", 1)==0){
+      s++;
     }
     else{
-      argv[index++] = tokens_get_token(tokens, k);
+      argv[index++] = *s;
     }
+    s++;
   }
   argv[index] = NULL;
   return argv;
 }
 
-/* bash execution with redirection symbols */
-int redirect(struct tokens* tokens)
+/* whether redirection is needed */
+int need_redirect(char** argv)
 {
-  int output_loc = find_redirect(tokens, ">");
-  int input_loc = find_redirect(tokens, "<");
+  if(find_symbol_loc(argv, ">")>=0 || find_symbol_loc(argv, "<") >= 0)
+    return 1;
+  return 0;
+}
+/* bash execution with redirection symbols */
+int redirect_execution(char** argv)
+{
+  int output_loc = find_symbol_loc(argv, ">");
+  int input_loc = find_symbol_loc(argv, "<");
   char* out_file;
   char* in_file;
   int fd_out, fd_in;
 
   if(output_loc > 0){
-    out_file = tokens_get_token(tokens, output_loc+1);
+    out_file = argv[output_loc+1];
     if(!out_file){
       fprintf(stderr, "Syntax error for >\n");
       return -1;
@@ -169,7 +177,7 @@ int redirect(struct tokens* tokens)
   }
 
   if(input_loc > 0){
-    in_file = tokens_get_token(tokens, input_loc+1);
+    in_file = argv[input_loc+1];
     if(!in_file){
       fprintf(stderr, "Syntax error for <\n");
       return -1;
@@ -182,13 +190,16 @@ int redirect(struct tokens* tokens)
     dup2(fd_in, STDIN_FILENO);
   }
 
-  char** argv = redirect_parse(tokens);
-  char* full_cmd_path = path_resolution(argv[0]);
-  if(execv(full_cmd_path, argv) == -1){
-    fprintf(stderr, "%s execution failed in redirection\n", full_cmd_path);
-    exit(1);
+  char** parse_argv = redirect_parse(argv);
+  char* cmd = path_resolution(parse_argv[0]);
+  if(cmd == NULL){
+    perror("path resolution failed\n");
+    return -1;
   }
-
+  if(execv(cmd, parse_argv) == -1){
+    fprintf(stderr, "%s execution failed in redirection\n", cmd);
+    return -1;
+  }
   return 0;
 }
 
@@ -235,12 +246,72 @@ char **regular_parse(struct tokens* tokens)
   return argv;
 }
 
+/* execute one single command process */
+int execute_command(char** argv)
+{
+  if(need_redirect(argv)){
+    int err = redirect_execution(argv);
+    if(err<0){
+      perror("redirect exectution failed\n");
+      return -1;
+    }
+    return 0;
+  }
+  else{
+    char* cmd = path_resolution(argv[0]);
+    execv(cmd, argv);
+  }
+  return 0;
+}
+
+
+/* execute passed commands */
+int execute_shell(char** command)
+{
+  /* find pipe symbol location, i.e., '|' */
+  int pipe_loc = find_symbol_loc(command, "|");
+  if(pipe_loc == 0){
+    perror("syntax error because | has no preceding characters\n");
+    return -1;
+  }
+  /* no pipes, treat it as one regular command */
+  else if(pipe_loc < 0){
+    execute_command(command);
+  }
+  /* there are pipes */
+  else{
+    int pipefd[2];
+    if(pipe(pipefd) == -1){
+      perror("pipe initialization failed\n");
+      return -1;
+    }
+    char** cur_command = command;
+    command[pipe_loc] = NULL;
+    char** next_command = &command[pipe_loc+1];
+    pid_t pid = fork();
+    if(pid<0){
+      perror("fork failed\n");
+      return -1;
+    }
+    else if(pid == 0){
+      close(pipefd[1]); /* child closes the write end */
+      dup2(pipefd[0], STDIN_FILENO);
+      execute_shell(next_command);
+    }
+    else{
+      close(pipefd[0]); /* parent closes the read end */
+      dup2(pipefd[1], STDOUT_FILENO);
+      execute_command(cur_command);
+    }
+  }
+  return 0;
+
+}
 /* not built-in commands execution */
 int cmd_bash(struct tokens* tokens)
 {
   char **argv = regular_parse(tokens);
-  char* cmd = argv[0];
-  
+
   /* fork and execv */
   pid_t pid = fork();
   if(pid<0){
@@ -248,25 +319,7 @@ int cmd_bash(struct tokens* tokens)
     return -1;
   }
   else if(pid == 0){
-    char* full_cmd_path = path_resolution(cmd);
-    if(full_cmd_path == NULL){
-      fprintf(stderr, "path resolution failed\n");
-      exit(1);
-    }
-    if(find_redirect(tokens, ">")>=0 || find_redirect(tokens, "<")>=0){
-      if(redirect(tokens)==-1){
-        fprintf(stderr, "redirection failed\n");
-        exit(1);
-      }
-      exit(0);
-    }
-    else{
-      if(execv(full_cmd_path, argv) == -1){
-      fprintf(stderr, "%s execution failed\n", cmd);
-      exit(1);
-      }
-      exit(0);
-    }
+    execute_shell(argv);
   }
   else{
     wait(NULL);
