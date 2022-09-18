@@ -37,6 +37,7 @@ int cmd_cd(struct tokens* tokens);
 
 /* HW2 not built-in commands */
 int cmd_bash(struct tokens* tokens);
+char** regular_parse(struct tokens* tokens);
 
 /* HW2 path resolution */
 char* path_resolution(const char*);
@@ -46,10 +47,12 @@ char* path_resolution(const char*);
 
 /* HW2 redirection */
 int find_symbol_loc(char**, char*);
+char** redirect_parse(char** args);
+int need_redirect(char** argv);
 int redirect_execution(char**);
 
 /* HW2 pipes */
-int* find_pipes(struct tokens* tokens);
+
 
 /* Built-in command functions take token array (see parse.h) and return int */
 typedef int cmd_fun_t(struct tokens* tokens);
@@ -153,6 +156,7 @@ int need_redirect(char** argv)
     return 1;
   return 0;
 }
+
 /* bash execution with redirection symbols */
 int redirect_execution(char** argv)
 {
@@ -201,37 +205,6 @@ int redirect_execution(char** argv)
     return -1;
   }
   return 0;
-}
-
-/* divide pipes */ 
-char** pipes_divide(struct tokens* tokens)
-{
-  size_t tokens_len = tokens_get_length(tokens);
-  char **argv = (char**)malloc(sizeof(char*)*(tokens_len + 1));
-  for(int k = 0;k<tokens_len;k++){
-    if(strncmp(tokens_get_token(tokens, k), "|", 1) == 0){
-      argv[k] = NULL;
-    }
-    else{
-      argv[k] = tokens_get_token(tokens,k);
-    }
-  }
-  argv[tokens_len] = NULL;
-  return argv;
-}
-
-/* locate pipes */
-int *find_pipes(struct tokens* tokens)
-{
-  size_t tokens_len = tokens_get_length(tokens);
-  int* pipe_locs = (int*)malloc(sizeof(int)*(tokens_len + 1));
-  int index = 0;
-  for(int k = 0;k<tokens_len;k++){
-    if(strncmp(tokens_get_token(tokens, k), "|", 1) == 0){
-     pipe_locs[index++] = k; 
-    }
-  }
-  return pipe_locs;
 }
 
 /* regular_parse, no redirection or) pipes */
