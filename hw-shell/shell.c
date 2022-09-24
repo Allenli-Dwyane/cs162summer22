@@ -303,6 +303,7 @@ int cmd_bash(struct tokens* tokens)
 /* path resolution */
 char* path_resolution(const char* path)
 {
+  
   if(*path == '/'){
     return path;
   }
