@@ -53,6 +53,8 @@ int redirect_execution(char**);
 
 /* HW2 pipes */
 
+/* whether in a pipeline */
+int inpipe;
 
 /* Built-in command functions take token array (see parse.h) and return int */
 typedef int cmd_fun_t(struct tokens* tokens);
@@ -118,11 +120,12 @@ int find_symbol_loc(char** args, char* symbol)
       if(loc < 0){
         /* find symbol for the first time */
         loc = index;
+        return loc;
       }
-      else{
-        fprintf(stderr, "More than one symbol\n");
-        return -1;
-      }
+      // else{
+      //   fprintf(stderr, "More than one symbol\n");
+      //   return -1;
+      // }
     }
     s++;
     index++;
@@ -222,6 +225,12 @@ char **regular_parse(struct tokens* tokens)
 /* execute one single command process */
 int execute_command(char** argv)
 {
+  /* if not in a pipeline, set group process id to its own pid */
+  /* otherwise, inherit from the calling process as default */
+  if(inpipe == 0)
+    setpgrp();
+
+  /* if redirection symbol is present */
   if(need_redirect(argv)){
     int err = redirect_execution(argv);
     if(err<0){
@@ -280,19 +289,35 @@ int execute_shell(char** command)
   return 0;
 
 }
+void sigtstp_handler(int signum)
+{
+  printf("hh");
+}
 /* not built-in commands execution */
 int cmd_bash(struct tokens* tokens)
 {
   char **argv = regular_parse(tokens);
-
   /* fork and execv */
-  pid_t pid = fork();
-  if(pid<0){
+  pid_t cpid = fork();
+  if(cpid<0){
     fprintf(stderr, "Fork failed\n");
     return -1;
   }
-  else if(pid == 0){
-    execute_shell(argv);
+  else if(cpid == 0){
+    tcsetpgrp(0, getpid());
+    /* set signal handlers to default, which are inherited by execute_command */
+    signal(SIGINT, SIG_DFL);
+    signal(SIGTTOU, SIG_DFL);
+    signal(SIGTSTP, SIG_DFL);
+    signal(SIGQUIT, SIG_DFL);
+    if(find_symbol_loc(argv, "|") < 0){
+      inpipe = 0;
+      execute_command(argv);
+    }
+    else{
+      inpipe = 1;
+      execute_shell(argv);
+    }
   }
   else{
     wait(NULL);
@@ -303,7 +328,7 @@ int cmd_bash(struct tokens* tokens)
 /* path resolution */
 char* path_resolution(const char* path)
 {
-  
+
   if(*path == '/'){
     return path;
   }
@@ -378,7 +403,10 @@ void init_shell() {
 
 int main(unused int argc, unused char* argv[]) {
   init_shell();
-
+  signal(SIGTTOU, SIG_IGN);
+  signal(SIGINT, SIG_IGN);
+  signal(SIGQUIT, SIG_IGN);
+  signal(SIGTSTP, SIG_IGN);
   static char line[4096];
   int line_num = 0;
 
@@ -409,9 +437,10 @@ int main(unused int argc, unused char* argv[]) {
     if (shell_is_interactive)
       /* Please only print shell prompts when standard input is not a tty */
       fprintf(stdout, "%d: ", ++line_num);
-
+    
     /* Clean up memory */
     tokens_destroy(tokens);
+    tcsetpgrp(0, shell_pgid);
   }
 
   return 0;
